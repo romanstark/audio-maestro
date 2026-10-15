@@ -28,6 +28,13 @@ from audio_maestro.timeline import (
     write_tempo_import,
 )
 
+#: Peak-hold length in 1 ms blocks: covers half a period down to about 33 Hz, and stays
+#: shorter than the 40 ms minimum spacing between reported hits.
+HOLD_MS = 15
+
+#: A hit must peak at this multiple of the tail still ringing before it to count.
+ATTACK_RATIO = 1.5
+
 
 def emit(data: dict[str, Any]) -> None:
     """Keep one JSON record on the worker channel."""
@@ -44,22 +51,35 @@ def hits(
     mono = np.max(np.abs(samples), axis=1)
     hop = max(1, round(rate * 0.001))
     padded = np.pad(mono, (0, (-len(mono)) % hop))
-    envelope = np.sqrt(np.mean(padded.reshape(-1, hop) ** 2, axis=1))
-    rise = np.maximum(0, np.diff(envelope, prepend=0))
+    blocks = padded.reshape(-1, hop).max(axis=1)
+    # A causal peak hold over HOLD_MS rides a decaying low-frequency body smoothly, so its
+    # half-cycles no longer read as new attacks; a real attack still lifts it at once.
+    held = np.lib.stride_tricks.sliding_window_view(
+        np.pad(blocks, (HOLD_MS - 1, 0)), HOLD_MS
+    ).max(axis=1)
+    rise = np.maximum(0, np.diff(held, prepend=0))
     floor = float(np.median(rise))
     mad = float(np.median(np.abs(rise - floor)))
     threshold = max(floor + sensitivity * mad, float(rise.max(initial=0)) * 0.025, 1e-6)
     candidates, _ = find_peaks(np.pad(rise, (1, 1)), height=threshold, distance=40)
     result = []
     for block in candidates - 1:
-        point = int(block * hop)
+        # The steepest rise can trail a noisy attack by milliseconds: step back to where
+        # the held envelope began to climb, so the tail level is read before the attack.
+        first = block
+        while first > 0 and block - first < HOLD_MS and held[first - 1] <= held[first]:
+            first -= 1
+        point = int(first * hop)
         window_start = max(0, point - round(rate * 0.02))
-        window_end = min(len(mono), point + round(rate * 0.01))
+        window_end = min(len(mono), int(block * hop) + round(rate * 0.01))
         local = mono[window_start:window_end]
         peak = float(local.max(initial=0))
-        if peak < 1e-5:
+        # The level still ringing from earlier hits. Isolated hits have none; a new hit
+        # must rise clearly above an existing tail.
+        before = float(mono[window_start:point].max(initial=0))
+        if peak < 1e-5 or peak < ATTACK_RATIO * before:
             continue
-        crossings = np.flatnonzero(local >= peak * 0.1)
+        crossings = np.flatnonzero(local >= before + 0.1 * (peak - before))
         if not len(crossings):
             continue
         onset = window_start + int(crossings[0])
@@ -74,7 +94,8 @@ def hits(
                 "peak": peak,
                 "uncertainty_samples": hop,
                 "attack_definition": (
-                    "first 10-percent local-peak crossing; calibrated offset subtracted"
+                    "first crossing 10 percent of the way from the preceding tail level "
+                    "to the local peak; calibrated offset subtracted"
                 ),
             }
         )

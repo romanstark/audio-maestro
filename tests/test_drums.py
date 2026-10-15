@@ -125,6 +125,64 @@ def test_real_worker_cancel_queued_and_resume(tmp_path: Path):
         jobs.close()
 
 
+def ringing(times: list[float], kind: str, tau: float, f0: float = 60, gains=None):
+    """Hits that ring on: a swept low-frequency kick body or a noise snare."""
+    np = pytest.importorskip("numpy")
+    rate, rng = 44100, np.random.default_rng(5)
+    samples = np.zeros(rate * 4)
+    t = np.arange(round(rate * 0.4)) / rate
+    for number, seconds in enumerate(times):
+        if kind == "kick":
+            body = np.sin(2 * np.pi * (f0 * t + 100 * (1 - np.exp(-t * 30)) / 30))
+        else:
+            body = rng.standard_normal(len(t)) * 0.5
+        hit = (gains[number] if gains else 0.8) * body * np.exp(-t / tau)
+        start = round(seconds * rate)
+        samples[start : start + len(hit)] += hit[: len(samples) - start]
+    return samples[:, None], rate
+
+
+def detected(samples, rate) -> list[float]:
+    pytest.importorskip("scipy")
+    from audio_maestro.drum_worker import hits
+
+    return [hit["sample"] / rate for hit in hits(samples, rate, 0, 6)]
+
+
+def assert_hits(found: list[float], expected: list[float], tolerance: float = 0.002):
+    assert len(found) == len(expected), found
+    for seconds, wanted in zip(found, expected):
+        assert abs(seconds - wanted) < tolerance, (found, expected)
+
+
+@pytest.mark.parametrize("f0", [50, 80])
+@pytest.mark.parametrize("tau", [0.03, 0.06, 0.1, 0.2])
+def test_ringing_kick_body_is_one_hit(f0: float, tau: float):
+    quarters = [0.5 + n * 0.5 for n in range(6)]
+    assert_hits(detected(*ringing(quarters, "kick", tau, f0)), quarters)
+
+
+@pytest.mark.parametrize("tau", [0.04, 0.08, 0.15])
+def test_long_snare_noise_tail_is_one_hit(tau: float):
+    quarters = [0.5 + n * 0.5 for n in range(6)]
+    assert_hits(detected(*ringing(quarters, "snare", tau)), quarters)
+
+
+def test_hits_inside_a_ringing_tail_keep_their_own_attack():
+    sixteenths = [0.5 + n * 60 / 160 / 4 for n in range(12)]
+    assert_hits(detected(*ringing(sixteenths, "kick", 0.056)), sixteenths)
+    doubles = [t for beat in (0.5, 1.0, 1.5, 2.0) for t in (beat, beat + 0.06)]
+    assert_hits(detected(*ringing(doubles, "kick", 0.056)), doubles)
+    snares = [0.5 + n * 60 / 160 / 4 for n in range(12)]
+    assert_hits(detected(*ringing(snares, "snare", 0.083)), snares)
+
+
+def test_soft_hit_after_a_loud_one():
+    times = [t for beat in (0.5, 1.0, 1.5, 2.0) for t in (beat, beat + 0.25)]
+    gains = [0.8 if n % 2 == 0 else 0.25 for n in range(len(times))]
+    assert_hits(detected(*ringing(times, "kick", 0.1, gains=gains)), times)
+
+
 def test_piecewise_seconds_to_beats_and_invalid_events(tmp_path: Path):
     anchors = validate_map(
         [{"seconds": 0, "beat": 0}, {"seconds": 2, "beat": 4}, {"seconds": 6, "beat": 8}]
