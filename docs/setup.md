@@ -26,6 +26,24 @@ subprocess environment; no Torch package or global PATH edit is required. CPU
 binaries must match the computer's instruction set. The portable CPU build can
 be substantially slower. Configuration does not imply a passed inference test.
 
+## macOS notes
+
+Inputs are read with libsndfile (WAV, FLAC, AIFF, OGG, MP3) on every platform.
+On macOS, files it cannot open, such as AAC/ALAC in M4A or CAF from Voice Memos,
+GarageBand or Music, are decoded by the system's `afconvert` into a temporary WAV.
+Core Audio removes the AAC encoder delay, so source seconds stay aligned. Reports
+keep the original path and fingerprint and record `decoded_by: afconvert`. Other
+platforms report these formats as unsupported; convert them to WAV or FLAC first.
+
+Basic Pitch setup pins SciPy below 1.15 on macOS: those Python 3.10 wheels fail
+to load on macOS 27. Running `audio-maestro-setup --backend basic_pitch --confirm`
+again repairs an existing environment.
+
+For SheetSage on Apple Silicon use the audio.cpp `macos-arm64-metal` archive. Its
+`audiocpp_cli` links only system frameworks, so `--library-dir` is not needed.
+Register it with `--device metal`. The first job loads the Metal library and the
+model and takes noticeably longer than later ones.
+
 Migrating from Live Maestro's experimental analysis tools:
 
 | Earlier Live tool | Independent replacement |

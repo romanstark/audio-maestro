@@ -14,7 +14,14 @@ from typing import Any
 from audio_maestro.jobs import atomic, data_root
 from audio_maestro.reference import fingerprint
 
-DEPENDENCIES = ["basic-pitch==0.4.0", "numpy>=1.26,<2", "onnxruntime==1.20.1", "setuptools==80.9.0"]
+DEPENDENCIES = [
+    "basic-pitch==0.4.0",
+    "numpy>=1.26,<2",
+    "onnxruntime==1.20.1",
+    "setuptools==80.9.0",
+    # SciPy 1.15 wheels for Python 3.10 hold a Mach-O section that macOS 27 refuses to load.
+    "scipy<1.15; sys_platform == 'darwin'",
+]
 SHEETSAGE_LICENSE = "https://huggingface.co/audio-cpp/SheetSage2-GGUF#license"
 
 

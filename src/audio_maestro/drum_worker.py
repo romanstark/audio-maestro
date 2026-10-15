@@ -114,12 +114,15 @@ def analyze(request: dict[str, Any]) -> dict[str, Any]:
     import numpy as np
     import soundfile as sf
 
+    from audio_maestro.decode import readable
+
     output = Path(request["output_dir"])
     output.mkdir(parents=True, exist_ok=True)
     events, sources, arrays = [], [], []
     for index, stem in enumerate(request["stems"]):
         path = Path(stem["path"])
-        samples, rate = sf.read(path, always_2d=True)
+        with readable(path) as (decoded, _):
+            samples, rate = sf.read(decoded, always_2d=True)
         if not samples.size or samples.shape[1] > 2 or not np.isfinite(samples).all():
             raise ValueError("stems must contain finite, nonempty mono/stereo samples")
         offset = stem["source_offset_seconds"]
@@ -128,7 +131,8 @@ def analyze(request: dict[str, Any]) -> dict[str, Any]:
         detected = hits(samples, rate, stem["calibration_ms"], request["sensitivity"])
         reference = None
         if stem.get("reference_path"):
-            reference, reference_rate = sf.read(stem["reference_path"], always_2d=True)
+            with readable(stem["reference_path"]) as (decoded, _):
+                reference, reference_rate = sf.read(decoded, always_2d=True)
             if (
                 reference_rate != rate
                 or reference.shape != samples.shape

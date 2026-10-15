@@ -14,7 +14,7 @@ class DrumStem(BaseModel):
     instrument: Literal["kick", "snare"] = Field(
         description="Known isolated source: kick or snare."
     )
-    path: str = Field(description="Local WAV/FLAC stem path; finite mono/stereo audio.")
+    path: str = Field(description="Local stem path (WAV/FLAC/AIFF/MP3; M4A on macOS); mono/stereo.")
     source_offset_seconds: float = Field(
         default=0, ge=0, description="Position of the file's first sample in the original source."
     )
@@ -70,7 +70,9 @@ ReferenceStemArg = Annotated[
     ReferenceStem, WithJsonSchema(inline_schema_refs(ReferenceStem.model_json_schema()))
 ]
 
-AudioFileArg = Annotated[str, Field(description="Local mono/stereo audio file path (WAV/FLAC).")]
+AudioFileArg = Annotated[
+    str, Field(description="Local mono/stereo audio (WAV/FLAC/AIFF/MP3; M4A on macOS).")
+]
 AudioOutputArg = Annotated[str, Field(description="Parent directory for a unique audio run.")]
 SourceStartArg = Annotated[float, Field(ge=0, description="Start in absolute source-file seconds.")]
 SourceEndArg = Annotated[float, Field(gt=0, description="Exclusive end in source-file seconds.")]

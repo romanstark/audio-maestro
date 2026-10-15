@@ -20,8 +20,10 @@ def read(path: str, start: float, end: float | None) -> tuple[Any, int, dict[str
     import numpy as np
     import soundfile as sf
 
+    from audio_maestro.decode import readable
+
     source = Path(path)
-    with sf.SoundFile(source) as audio:
+    with readable(source) as (decoded, decoder), sf.SoundFile(decoded) as audio:
         rate = audio.samplerate
         first = math.floor(start * rate)
         last = min(audio.frames, math.floor(end * rate)) if end is not None else audio.frames
@@ -40,6 +42,8 @@ def read(path: str, start: float, end: float | None) -> tuple[Any, int, dict[str
             "start_seconds": first / rate,
             "end_seconds": (first + len(samples)) / rate,
         }
+        if decoder:
+            info["decoded_by"] = decoder
     if not np.isfinite(samples).all():
         raise ValueError("audio contains nonfinite samples")
     return samples, rate, info
