@@ -57,7 +57,7 @@ class ReferenceStem(BaseModel):
     """A source from any separator, kept on an explicit source timeline."""
 
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
-    path: str = Field(description="Local stem from Suno, UVR, a DAW export or another source.")
+    path: str = Field(description="Local stem from a generator, UVR, a DAW export or elsewhere.")
     role: str = Field(default="unknown", description="Known musical role; unknown is not inferred.")
     source_offset_seconds: float = Field(
         default=0,

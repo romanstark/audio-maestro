@@ -90,6 +90,53 @@ def write_midi(path: Path, notes: list[dict[str, Any]], anchors: list[dict[str, 
     )
 
 
+def notes_aligned(
+    samples: Any,
+    rate: int,
+    offset: float,
+    duration: float,
+    notes: list[dict[str, Any]],
+    request: dict[str, Any],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    from audio_maestro.lines import align, note_name, track
+
+    mapping = validate_map(request["beat_anchors"])
+    low = request.get("align_low_note")
+    high = request.get("align_high_note")
+    low = max(0, min(n["pitch"] for n in notes) - 2) if low is None else low
+    high = min(127, max(n["pitch"] for n in notes) + 2) if high is None else high
+    first = max(mapping[0]["beat"], to_beat(offset, mapping))
+    last = min(mapping[-1]["beat"], to_beat(offset + duration, mapping))
+    line = track(
+        samples.mean(axis=1),
+        rate,
+        offset,
+        mapping,
+        first,
+        last,
+        low,
+        high,
+        request["align_voice"],
+        request.get("align_scale"),
+    )
+    moved, sections = align(
+        notes,
+        line,
+        mapping,
+        request["align_section_beats"],
+        snap_beats=request.get("align_snap_beats"),
+    )
+    report = {
+        "notes": moved,
+        "register": [note_name(low), note_name(high)],
+        "line_notes": len(line),
+        "sections": sections,
+        "basis": "median beat offset per section between note onsets and the tracked "
+        "line's onsets of the same pitch class; positive means the model was early",
+    }
+    return report, notes
+
+
 def transcribe(request: dict[str, Any]) -> dict[str, Any]:
     import numpy as np
     import soundfile as sf
@@ -163,6 +210,11 @@ def transcribe(request: dict[str, Any]) -> dict[str, Any]:
 
     raw, notes = rows(bounded), rows(kept)
     anchors = request.get("beat_anchors")
+    alignment = None
+    unaligned = None
+    if request.get("align_to_audio") and anchors and notes:
+        alignment, unaligned = notes_aligned(samples, rate, offset, duration, notes, request)
+        notes = alignment.pop("notes")
     coverage = request["source_offset_seconds"] + source["end_seconds"]
     # A neutral 120-BPM carrier preserves seconds. It is not an inferred song tempo.
     midi_map = anchors or [
@@ -196,6 +248,8 @@ def transcribe(request: dict[str, Any]) -> dict[str, Any]:
             "monophonic": request["monophonic"],
             "merge": request["merge"],
         },
+        "unaligned_notes": unaligned,
+        "alignment": alignment,
         "beat_notes": midi_notes if anchors else None,
         "timing": {
             "anchors": anchors,

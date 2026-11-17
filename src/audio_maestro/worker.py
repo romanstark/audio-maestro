@@ -28,6 +28,18 @@ def main() -> None:
             from audio_maestro.pipeline import transcribe
 
             report = transcribe(request)
+        elif request["kind"] == "kit":
+            from audio_maestro.kit import analyze_kit
+
+            report = analyze_kit(request)
+        elif request["kind"] == "voice":
+            from audio_maestro.lines import track_voice
+
+            report = track_voice(request)
+        elif request["kind"] == "sound":
+            from audio_maestro.sound import describe
+
+            report = describe(request)
         else:
             raise ValueError("Unsupported worker kind.")
         target = Path(request["output_dir"]) / "report.json"
@@ -40,6 +52,7 @@ def main() -> None:
                     "report_path": str(target),
                     "audio_paths": report.get("audio_paths", []),
                     "midi_path": report.get("midi_path"),
+                    "data_paths": report.get("data_paths", []),
                     "review_required": report["review_required"],
                 }
             ),

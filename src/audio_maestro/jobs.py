@@ -78,7 +78,7 @@ class AudioJobs:
     def submit(self, request: dict[str, Any], output_root: str) -> dict[str, Any]:
         """Validate input existence, then enqueue into a unique run directory."""
         kind = request.get("kind", "drums")
-        if kind not in {"drums", "reference", "transcription"}:
+        if kind not in {"drums", "reference", "transcription", "kit", "voice", "sound"}:
             raise ValueError("unsupported audio job kind")
         if kind == "drums" and not request.get("stems"):
             raise ValueError("at least one identified kick/snare stem is required")
@@ -309,7 +309,11 @@ class AudioJobs:
 
     @staticmethod
     def _verify_file_result(output: Path, result: dict[str, Any], request: dict[str, Any]) -> None:
-        paths = [Path(result["report_path"]), *map(Path, result.get("audio_paths", []))]
+        paths = [
+            Path(result["report_path"]),
+            *map(Path, result.get("audio_paths", [])),
+            *map(Path, result.get("data_paths", [])),
+        ]
         if result.get("midi_path"):
             paths.append(Path(result["midi_path"]))
         fingerprints = {}

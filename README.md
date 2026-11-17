@@ -59,9 +59,20 @@ MIDI without reviewed anchors uses a 120-BPM carrier preserving absolute source
 seconds. That carrier does **not** identify the song's tempo. Velocity is an
 explicit constant, not inferred dynamics. Model activation is retained separately.
 
-For identified kick/snare files, use `analyze_drums`. Pitched-note transcription
-does not classify a mixed drum kit. One-shot activity in another stem is not a
-measured leakage score.
+With reviewed anchors, `transcribe_audio(align_to_audio=True)` moves note onsets to
+the pitch changes of a tracked line, section by section, because model timing
+drifts. `track_voice` returns that line on its own: one voice per register on the
+beat grid, as notes and MIDI.
+
+For identified kick/snare files, use `analyze_drums`. For a whole kit in one file,
+`analyze_drum_kit` classifies kick, snare and hat from band rises on reviewed beats
+and writes events Live Maestro's drum writer accepts. One-shot activity in another
+stem is not a measured leakage score.
+
+`describe_sound` measures an instrument in synthesizer units: attack and decay in
+seconds, filter edge and its movement as a tempo division, resonance range and tail
+decay per band. Together with Live Maestro's `compare_spectrum` it closes the loop
+reference, MIDI, render, difference, refine.
 
 ## Optional SheetSage
 
